@@ -1,41 +1,39 @@
 import SwiftUI
-import SwiftData
 import Photos
 
 // MARK: - 翻译历史列表（支持搜索 / 收藏过滤 / 批量删除）
 struct HistoryListView: View {
-    @Environment(\.modelContext) private var modelContext
     let favoritesOnly: Bool
 
-    @State private var items: [HistoryItem] = []
+    @State private var items: [AppStore.HistoryEntry] = []
     @State private var keyword = ""
     @State private var editMode = false
-    @State private var selected: Set<PersistentIdentifier> = []
-    @State private var detailItem: HistoryItem?
-    private let service: HistoryService
-
-    init(favoritesOnly: Bool) {
-        self.favoritesOnly = favoritesOnly
-        // service 在 onAppear 时用 context 构造
-        self.service = HistoryService(context: ModelContext(try! ModelContainer(for: HistoryItem.self)))
-    }
+    @State private var selected: Set<UUID> = []
+    @State private var detailItem: AppStore.HistoryEntry?
 
     var body: some View {
         Group {
             if items.isEmpty {
-                ContentUnavailableView(
-                    favoritesOnly ? "暂无收藏" : "暂无历史记录",
-                    systemImage: favoritesOnly ? "star" : "clock.arrow.circlepath",
-                    description: Text(favoritesOnly ? "在历史记录中点击收藏即可添加" : "完成一次截图翻译后自动生成记录")
-                )
+                // iOS 16 兼容的空状态（不使用 iOS17 的 ContentUnavailableView）
+                VStack(spacing: 10) {
+                    Image(systemName: favoritesOnly ? "star" : "clock.arrow.circlepath")
+                        .font(.system(size: 44))
+                        .foregroundStyle(.secondary)
+                    Text(favoritesOnly ? "暂无收藏" : "暂无历史记录")
+                        .font(.headline)
+                    Text(favoritesOnly ? "在历史记录中点击收藏即可添加" : "完成一次截图翻译后自动生成记录")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
-                    ForEach(items, id: \.persistentModelID) { item in
+                    ForEach(items) { item in
                         row(item)
                     }
                     .onDelete { indexSet in
                         let targets = indexSet.map { items[$0] }
-                        service.delete(targets)
+                        HistoryService.shared.delete(targets)
                         refresh()
                     }
                 }
@@ -43,15 +41,15 @@ struct HistoryListView: View {
         }
         .navigationTitle(favoritesOnly ? "收藏" : "翻译历史")
         .searchable(text: $keyword, prompt: "搜索原文/译文关键词")
-        .onChange(of: keyword) { _, _ in refresh() }
+        .onChange(of: keyword) { _ in refresh() }
         .onAppear { refresh() }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button(editMode ? "完成" : "批量删除") {
                     editMode.toggle()
                     if !editMode && !selected.isEmpty {
-                        let targets = items.filter { selected.contains($0.persistentModelID) }
-                        service.delete(targets)
+                        let targets = items.filter { selected.contains($0.id) }
+                        HistoryService.shared.delete(targets)
                         selected.removeAll()
                         refresh()
                     }
@@ -65,22 +63,22 @@ struct HistoryListView: View {
     }
 
     @ViewBuilder
-    private func row(_ item: HistoryItem) -> some View {
+    private func row(_ item: AppStore.HistoryEntry) -> some View {
         HStack(spacing: 10) {
             if editMode {
                 // 批量选择框
-                Image(systemName: selected.contains(item.persistentModelID) ? "checkmark.circle.fill" : "circle")
+                Image(systemName: selected.contains(item.id) ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(.blue)
                     .onTapGesture {
-                        if selected.contains(item.persistentModelID) {
-                            selected.remove(item.persistentModelID)
+                        if selected.contains(item.id) {
+                            selected.remove(item.id)
                         } else {
-                            selected.insert(item.persistentModelID)
+                            selected.insert(item.id)
                         }
                     }
             }
             // 缩略图
-            if let ui = UIImage(data: item.imageData) {
+            if let ui = AppStore.loadImage(item.imageFile) {
                 Image(uiImage: ui)
                     .resizable().scaledToFill()
                     .frame(width: 54, height: 54)
@@ -103,10 +101,10 @@ struct HistoryListView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             if editMode {
-                if selected.contains(item.persistentModelID) {
-                    selected.remove(item.persistentModelID)
+                if selected.contains(item.id) {
+                    selected.remove(item.id)
                 } else {
-                    selected.insert(item.persistentModelID)
+                    selected.insert(item.id)
                 }
             } else {
                 detailItem = item
@@ -115,29 +113,25 @@ struct HistoryListView: View {
     }
 
     private func refresh() {
-        let ctx = modelContext
-        let svc = HistoryService(context: ctx)
-        items = svc.fetch(keyword: keyword, favoritesOnly: favoritesOnly)
+        items = HistoryService.shared.fetch(keyword: keyword, favoritesOnly: favoritesOnly)
     }
 }
 
 // MARK: - 历史记录详情（重新查看 / 导出图片 / 导出TXT / 收藏 / 删除）
 struct HistoryDetailView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @State var item: HistoryItem
+    @State var item: AppStore.HistoryEntry
     let onRefresh: () -> Void
 
     @State private var showShareTXT = false
     @State private var txtContent = ""
-    @State private var showCompareExport = false
     @State private var toast: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 // 截图
-                if let ui = UIImage(data: item.imageData) {
+                if let ui = AppStore.loadImage(item.overlayFile ?? item.imageFile) {
                     Image(uiImage: ui)
                         .resizable().scaledToFit()
                         .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -161,17 +155,17 @@ struct HistoryDetailView: View {
         }
         .navigationTitle("记录详情")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button(item.isFavorite ? "取消收藏" : "收藏") {
-                        HistoryService(context: modelContext).toggleFavorite(item)
+                        HistoryService.shared.toggleFavorite(item)
                         onRefresh()
                     }
                     Button("导出图片到相册") { exportImage() }
                     Button("导出TXT（仅译文）") { exportTXT(compare: false) }
                     Button("导出TXT（双源对比）") { exportTXT(compare: true) }
                     Button("删除记录", role: .destructive) {
-                        HistoryService(context: modelContext).delete(item)
+                        HistoryService.shared.delete(item)
                         onRefresh()
                         dismiss()
                     }
@@ -197,7 +191,7 @@ struct HistoryDetailView: View {
     }
 
     private func exportImage() {
-        guard let img = UIImage(data: item.overlayData ?? item.imageData) else { return }
+        guard let img = AppStore.loadImage(item.overlayFile ?? item.imageFile) else { return }
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else { return }
             PHPhotoLibrary.shared().performChanges {
@@ -222,6 +216,3 @@ struct ShareSheet: UIViewControllerRepresentable {
     }
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
-
-// HistoryItem 支持 sheet(item:)
-extension HistoryItem: Identifiable {}
