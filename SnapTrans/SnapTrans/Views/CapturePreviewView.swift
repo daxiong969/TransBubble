@@ -331,18 +331,34 @@ struct CapturePreviewView: View {
     }
 }
 
-// MARK: - 苹果翻译 Task 修饰器（iOS 17.4+，低版本空实现）
+// MARK: - 苹果翻译 Task 修饰器（iOS 18+，低版本空实现）
 struct AppleTranslationTaskModifier: ViewModifier {
-    let coordinator: AppleTranslateCoordinator
+    @ObservedObject var coordinator: AppleTranslateCoordinator
 
     func body(content: Content) -> some View {
-        if #available(iOS 17.4, *) {
-            content.translationTask(coordinator.configuration) { session in
-                await coordinator.perform(session: session)
-            }
+        if #available(iOS 18.0, *) {
+            content.modifier(_AppleTaskModifier(coordinator: coordinator))
         } else {
             content
         }
+    }
+}
+
+@available(iOS 18.0, *)
+private struct _AppleTaskModifier: ViewModifier {
+    @ObservedObject var coordinator: AppleTranslateCoordinator
+    @State private var configuration: TranslationSession.Configuration?
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: coordinator.configRevision) { _, _ in
+                if let d = coordinator.configData {
+                    configuration = TranslationSession.Configuration(source: d.source, target: d.target)
+                }
+            }
+            .translationTask(configuration) { session in
+                await coordinator.perform(session: session)
+            }
     }
 }
 
