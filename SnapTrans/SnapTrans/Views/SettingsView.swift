@@ -1,10 +1,8 @@
 import SwiftUI
-import SwiftData
 import AVFoundation
 
 // MARK: - 设置页（完整选项）
 struct SettingsView: View {
-    @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var theme: ThemeManager
 
     @State private var deeplKey = KeychainService.load()
@@ -147,7 +145,7 @@ struct SettingsView: View {
                 Text("30 天").tag("30d")
             }
             Button("清空全部缓存", role: .destructive) {
-                CacheService(context: modelContext).clearAll()
+                CacheService.shared.clearAll()
                 cacheClearedToast = "已清空全部缓存"
             }
             Text("缓存 key = 原文+源语言+目标语言+翻译服务商；两个翻译源独立缓存；命中缓存不调用翻译 API。")
@@ -290,7 +288,7 @@ struct PrivacyPolicyView: View {
                 }
                 Group {
                     Text("隐私承诺").font(.headline)
-                    Text("无登录、无广告、无埋点、不收集任何用户行为数据。截图与历史记录全部保存在本机（SwiftData），DeepL 密钥保存在系统 Keychain。")
+                    Text("无登录、无广告、无埋点、不收集任何用户行为数据。截图与历史记录全部保存在本机（JSON 文件存储），DeepL 密钥保存在系统 Keychain。")
                 }
             }
             .padding()
