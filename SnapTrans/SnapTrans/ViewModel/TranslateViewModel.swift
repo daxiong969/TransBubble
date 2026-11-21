@@ -146,7 +146,7 @@ final class TranslateViewModel: ObservableObject {
                     working[i].fromCache = true
                     hitCacheAny = true
                 } else if working[i].apple.isEmpty {
-                    pending.append(ApplePendingItem(key: key, text: working[i].original, index: i))
+                    pending.append(ApplePendingItem(key: key, text: working[i].original))
                 }
             }
             if pending.isEmpty {
@@ -229,8 +229,7 @@ final class TranslateViewModel: ObservableObject {
                 } catch {}
             } else {
                 // 苹果引擎走 Coordinator
-                let item = ApplePendingItem(key: key, text: snapshot.original,
-                                            index: self.blocks.firstIndex(where: { $0.id == snapshot.id }) ?? 0)
+                let item = ApplePendingItem(key: key, text: snapshot.original)
                 let src = self.settings.sourceLang == "auto" ? nil :
                     Locale.Language(identifier: LangDefs.ttsLocale(self.settings.sourceLang))
                 self.appleCoordinator.onResult = { [weak self] k, t in
