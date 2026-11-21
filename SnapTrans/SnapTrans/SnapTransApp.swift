@@ -5,7 +5,7 @@ import SwiftData
 @main
 struct SnapTransApp: App {
     // SwiftData 容器：缓存 + 历史记录
-    let container = try? ModelContainer(for: CacheItem.self, HistoryItem.self)
+    let container = try! ModelContainer(for: CacheItem.self, HistoryItem.self)
     @StateObject private var theme = ThemeManager()
     @StateObject private var flow = AppFlowManager()
 
@@ -15,7 +15,7 @@ struct SnapTransApp: App {
                 .environmentObject(theme)
                 .environmentObject(flow)
                 .preferredColorScheme(theme.colorScheme)
-                .modelContainer(container ?? try! ModelContainer(for: CacheItem.self, HistoryItem.self))
+                .modelContainer(container)
         }
     }
 }
