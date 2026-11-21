@@ -29,8 +29,18 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSPhotoLibraryAddUsageDescription: 用于将带译文叠加的合成图片保存到您的相册，仅保存在本机。
         UIBackgroundModes: [audio]
+  SnapTransTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - SnapTransTests
+    dependencies:
+      - target: SnapTrans
 schemes:
   SnapTrans:
     build:
       targets:
         SnapTrans: all
+    test:
+      targets:
+        - SnapTransTests
