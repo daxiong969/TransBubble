@@ -139,7 +139,7 @@ struct HistoryService {
         let df = DateFormatter()
         df.dateFormat = "yyyy-MM-dd HH:mm:ss"
         lines.append("=== 译拍通翻译记录 ===")
-        lines.append("时间：\(df.string(item.createdAt))")
+        lines.append("时间：\(df.string(from: item.createdAt))")
         lines.append("目标语言：\(item.targetLang)   引擎：\(item.engine)   命中缓存：\(item.usedCache ? "是" : "否")")
         lines.append("")
         let originals = item.originals
