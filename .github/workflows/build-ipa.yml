@@ -1,43 +1,35 @@
-name: Build Unsigned IPA
-
+name: Build IPA
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Install XcodeGen
         run: brew install xcodegen
-
-      - name: Generate Xcode project
-        run: xcodegen generate
-
-      - name: Build (unsigned, for sideload)
+      - name: Generate project and build
         run: |
-          xcodebuild -project TransBubble.xcodeproj \
-            -scheme TransBubble \
+          cd SnapTrans
+          xcodegen generate --spec project.yml
+          xcodebuild -project SnapTrans.xcodeproj \
+            -scheme SnapTrans \
             -configuration Release \
             -derivedDataPath build/DerivedData \
             -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
-
-      - name: Package IPA
-        run: |
           APP_PATH=$(find build/DerivedData/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
           echo "App: $APP_PATH"
           mkdir -p build/Payload
           cp -R "$APP_PATH" build/Payload/
-          cd build && zip -qry TransBubble-unsigned.ipa Payload
-
+          cd build && zip -qry SnapTrans-unsigned.zip Payload
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TransBubble-unsigned-ipa
-          path: build/TransBubble-unsigned.ipa
-          retention-days: 7
+          name: SnapTrans-unsigned
+          path: SnapTrans/build/SnapTrans-unsigned.zip
