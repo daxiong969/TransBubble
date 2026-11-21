@@ -22,19 +22,43 @@ final class PipManager: NSObject, ObservableObject, AVPictureInPictureController
     private var playerLayer: AVPlayerLayer?
     private var pipController: AVPictureInPictureController?
     private var rateObserver: NSKeyValueObservation?
+    private var pipPossibleObserver: NSKeyValueObservation?
     private var lastTapTime: Date = .distantPast
+    /// 面向界面的状态提示（生成中/不支持等）
+    @Published var statusMessage = ""
 
     // MARK: 开启悬浮球
     @MainActor
     func start(size: Double, opacity: Double) {
         guard !isActive else { return }
-        guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        guard AVPictureInPictureController.isPictureInPictureSupported() else {
+            statusMessage = "当前设备不支持画中画"
+            return
+        }
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.activationState == .foregroundActive }) else { return }
+            .first(where: { $0.activationState == .foregroundActive }) else {
+            statusMessage = "App 未在前台，无法启动"
+            return
+        }
 
-        let videoURL = Self.makeBallVideoIfNeeded(size: size)
+        // PiP 后台存活必需：激活 playback 音频会话
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        try? AVAudioSession.sharedInstance().setActive(true)
 
+        statusMessage = "正在准备悬浮球…"
+        // 修复①：视频生成是耗时操作，放后台线程，避免卡死界面
+        DispatchQueue.global(qos: .userInitiated).async {
+            let videoURL = Self.makeBallVideoIfNeeded(size: size)
+            DispatchQueue.main.async {
+                self.setupPlayerAndPip(videoURL: videoURL, opacity: opacity, scene: scene)
+            }
+        }
+    }
+
+    /// 视频就绪后在主线程装配播放器并启动 PiP
+    @MainActor
+    private func setupPlayerAndPip(videoURL: URL, opacity: Double, scene: UIWindowScene) {
         let playerItem = AVPlayerItem(url: videoURL)
         // 无限循环：播放到结尾后重播
         let player = AVPlayer(playerItem: playerItem)
@@ -62,10 +86,24 @@ final class PipManager: NSObject, ObservableObject, AVPictureInPictureController
         self.playerLayer = layer
 
         let pipInit = AVPictureInPictureController(playerLayer: layer)
-        guard let pip = pipInit else { return }
+        guard let pip = pipInit else {
+            statusMessage = "画中画控制器创建失败"
+            return
+        }
         pip.delegate = self
+        pip.canStartPictureInPictureAutomaticallyFromInline = true
         self.pipController = pip
         self.player = player
+
+        // 修复②：监听 PiP 可用性，系统就绪后再启动（原来写死 0.5 秒会静默失败）
+        pipPossibleObserver = pip.observe(\.isPictureInPicturePossible, options: [.new]) { [weak self] pip, _ in
+            DispatchQueue.main.async {
+                guard let self, self.pipController === pip, pip.isPictureInPicturePossible else { return }
+                self.pipPossibleObserver?.invalidate()
+                self.pipPossibleObserver = nil
+                pip.startPictureInPicture()
+            }
+        }
 
         // KVO 监听播放状态变化 = PiP 窗口被点击（系统会切换播放/暂停）
         rateObserver = player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
@@ -80,10 +118,6 @@ final class PipManager: NSObject, ObservableObject, AVPictureInPictureController
         }
 
         player.play()
-        // 延迟启动 PiP，确保播放器就绪
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.pipController?.startPictureInPicture()
-        }
     }
 
     /// 停止悬浮球
@@ -91,6 +125,8 @@ final class PipManager: NSObject, ObservableObject, AVPictureInPictureController
     func stop() {
         rateObserver?.invalidate()
         rateObserver = nil
+        pipPossibleObserver?.invalidate()
+        pipPossibleObserver = nil
         pipController?.stopPictureInPicture()
         player?.pause()
         player = nil
@@ -100,6 +136,7 @@ final class PipManager: NSObject, ObservableObject, AVPictureInPictureController
         window?.isHidden = true
         window = nil
         isActive = false
+        statusMessage = ""
     }
 
     // MARK: 点击判定（区分单击 / 双击）
@@ -168,7 +205,12 @@ final class PipManager: NSObject, ObservableObject, AVPictureInPictureController
             adaptor.append(pb, withPresentationTime: time)
         }
         input.markAsFinished()
-        writer.finishWriting { }
+        // 修复③：finishWriting 是异步的，必须等写盘完成再返回 URL，
+        // 否则播放器拿到半截文件会加载失败 → PiP 永远无法启动
+        let semaphore = DispatchSemaphore(value: 0)
+        writer.finishWriting { semaphore.signal() }
+        semaphore.wait()
+        guard writer.status == .completed else { return url }
         cachedURL = url
         return url
     }
