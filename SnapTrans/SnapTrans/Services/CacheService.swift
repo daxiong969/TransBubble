@@ -1,4 +1,6 @@
 import Foundation
+import SwiftData
+import UIKit
 import CryptoKit
 
 // MARK: - 缓存 Key 工具
