@@ -35,7 +35,7 @@ final class ScreenCaptureService {
                     cont.resume(throwing: TranslateError.captureFailed("无法解析屏幕画面数据"))
                 }
             }
-            recorder.startCapture(with: videoHandler, audioHandler: nil) { startError in
+            recorder.startCapture(handler: videoHandler) { startError in
                 guard !resumed else { return }
                 if let startError {
                     resumed = true
