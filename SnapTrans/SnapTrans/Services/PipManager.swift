@@ -5,7 +5,7 @@ import UIKit
 // MARK: - PiP 画中画悬浮球管理器
 // iOS 无全局悬浮权限，采用 PiP（画中画）实现可悬浮的触发按钮：
 // 1. 首次启动用 AVAssetWriter 生成一段"悬浮球"循环视频；
-// 2. AVPlayer 无限循环播放该视频，启动 PiP 后窗口悬浮于其他 App 之上；
+// 2. AVPlayer 无限循环播放该视频，通过 AVPlayerLayer 启动 PiP 后窗口悬浮于其他 App 之上；
 // 3. 用户点击 PiP 窗口时系统会切换播放/暂停状态，通过 KVO 监听该变化判定为"点击触发"；
 // 4. 触发后回调 onTap → 截图一次 → OCR → 翻译（不持续录屏）。
 final class PipManager: NSObject, ObservableObject, AVPictureInPictureControllerDelegate {
@@ -19,6 +19,7 @@ final class PipManager: NSObject, ObservableObject, AVPictureInPictureController
 
     private var window: UIWindow?
     private var player: AVPlayer?
+    private var playerLayer: AVPlayerLayer?
     private var pipController: AVPictureInPictureController?
     private var rateObserver: NSKeyValueObservation?
     private var lastTapTime: Date = .distantPast
@@ -41,20 +42,26 @@ final class PipManager: NSObject, ObservableObject, AVPictureInPictureController
         NotificationCenter.default.addObserver(self, selector: #selector(loopVideo),
                                                name: .AVPlayerItemDidPlayToEndTime, object: playerItem)
 
-        let vc = AVPlayerViewController()
-        vc.player = player
-        vc.showsPlaybackControls = false
-        // 视频视图透明度 = 悬浮球不透明度
-        vc.view.alpha = CGFloat(opacity)
+        // AVPlayerLayer 承载视频（PiP 必须基于 playerLayer）
+        let layer = AVPlayerLayer(player: player)
+        layer.frame = CGRect(x: 0, y: 0, width: 120, height: 120)
+        layer.videoGravity = .resizeAspect
+        layer.opacity = Float(opacity)
 
-        // 创建独立窗口承载播放器（随后启动 PiP 即可移出）
+        // 容器 VC：把 playerLayer 挂上去
+        let containerVC = UIViewController()
+        containerVC.view.backgroundColor = .clear
+        containerVC.view.layer.addSublayer(layer)
+
+        // 创建独立窗口承载（随后启动 PiP 即可移出屏幕）
         let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: -2000, y: 0, width: 10, height: 10) // 移出屏幕外，仅用于承载
-        window.rootViewController = vc
+        window.frame = CGRect(x: -2000, y: 0, width: 120, height: 120)
+        window.rootViewController = containerVC
         window.isHidden = false
         self.window = window
+        self.playerLayer = layer
 
-        let pip = AVPictureInPictureController(playerLayer: player.layer)
+        let pip = AVPictureInPictureController(playerLayer: layer)
         pip.delegate = self
         self.pipController = pip
         self.player = player
@@ -86,6 +93,8 @@ final class PipManager: NSObject, ObservableObject, AVPictureInPictureController
         pipController?.stopPictureInPicture()
         player?.pause()
         player = nil
+        playerLayer?.removeFromSuperlayer()
+        playerLayer = nil
         pipController = nil
         window?.isHidden = true
         window = nil
@@ -163,33 +172,37 @@ final class PipManager: NSObject, ObservableObject, AVPictureInPictureController
         return url
     }
 
-    /// 绘制一帧：深灰底 + 居中蓝色"译"球（呼吸缩放）
+    /// 生成一帧像素缓冲：深灰底 + 居中蓝色"译"球（呼吸缩放）
     private static func pixelBuffer(dim: Int, frame: Int) -> CVPixelBuffer {
         var pb: CVPixelBuffer?
         CVPixelBufferCreate(kCFAllocatorDefault, dim, dim, kCVPixelFormatType_32BGRA, nil, &pb)
-        guard let buffer = pb else { fatalError() }
+        guard let buffer = pb else { fatalError("无法创建像素缓冲") }
         CVPixelBufferLockBaseAddress(buffer, [])
-        let ctx = UIGraphicsImageRenderer(size: CGSize(width: dim, height: dim)).cgContext
-        // 深色背景
-        ctx.setFillColor(UIColor(red: 0.08, green: 0.09, blue: 0.11, alpha: 1).cgColor)
-        ctx.fill(CGRect(x: 0, y: 0, width: dim, height: dim))
-        // 呼吸缩放的蓝色球
-        let phase = CGFloat(frame % 30) / 30.0
-        let scale = 1.0 + 0.06 * sin(phase * .pi * 2)
-        let r = CGFloat(dim) * 0.3 * scale
-        let center = CGPoint(x: dim / 2, y: dim / 2)
-        ctx.setFillColor(UIColor(red: 0.12, green: 0.53, blue: 0.90, alpha: 1).cgColor)
-        ctx.fillEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
-        // 中心白色"译"字
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: CGFloat(dim) * 0.2, weight: .bold),
-            .foregroundColor: UIColor.white,
-        ]
-        let s = NSAttributedString(string: "译", attributes: attrs)
-        let sz = s.size()
-        s.draw(at: CGPoint(x: center.x - sz.width / 2, y: center.y - sz.height / 2))
-        // 写入像素
-        let image = UIGraphicsImageRenderer(size: CGSize(width: dim, height: dim)).image { $0.cgContext = ctx }
+        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
+
+        // 用 UIGraphicsImageRenderer 绘制悬浮球画面
+        let image = UIGraphicsImageRenderer(size: CGSize(width: dim, height: dim)).image { rc in
+            let ctx = rc.cgContext
+            // 深色背景
+            ctx.setFillColor(UIColor(red: 0.08, green: 0.09, blue: 0.11, alpha: 1).cgColor)
+            ctx.fill(CGRect(x: 0, y: 0, width: dim, height: dim))
+            // 呼吸缩放的蓝色球
+            let phase = CGFloat(frame % 30) / 30.0
+            let scale = 1.0 + 0.06 * sin(phase * .pi * 2)
+            let r = CGFloat(dim) * 0.3 * scale
+            let center = CGPoint(x: dim / 2, y: dim / 2)
+            ctx.setFillColor(UIColor(red: 0.12, green: 0.53, blue: 0.90, alpha: 1).cgColor)
+            ctx.fillEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+            // 中心白色"译"字
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: CGFloat(dim) * 0.2, weight: .bold),
+                .foregroundColor: UIColor.white,
+            ]
+            let s = NSAttributedString(string: "译", attributes: attrs)
+            let sz = s.size()
+            s.draw(at: CGPoint(x: center.x - sz.width / 2, y: center.y - sz.height / 2))
+        }
+        // 写入像素缓冲
         let outCtx = CGContext(data: CVPixelBufferGetBaseAddress(buffer),
                                width: dim, height: dim,
                                bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
@@ -197,7 +210,6 @@ final class PipManager: NSObject, ObservableObject, AVPictureInPictureController
                                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
         outCtx?.clear(CGRect(x: 0, y: 0, width: dim, height: dim))
         outCtx?.draw(image.cgImage!, in: CGRect(x: 0, y: 0, width: dim, height: dim))
-        CVPixelBufferUnlockBaseAddress(buffer, [])
         return buffer
     }
 }
