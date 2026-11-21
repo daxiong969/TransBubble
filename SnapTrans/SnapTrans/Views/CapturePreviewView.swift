@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import Photos
+import Translation
 
 // MARK: - 翻译预览页（核心）
 // 底层原图固定不变，上层译文精准叠加；支持缩放拖动、双语对比、单块操作、导出、朗读、框选识别、编辑原文
