@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Photos
 
 // MARK: - 翻译历史列表（支持搜索 / 收藏过滤 / 批量删除）
 struct HistoryListView: View {
