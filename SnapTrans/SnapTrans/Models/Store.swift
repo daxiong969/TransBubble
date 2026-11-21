@@ -34,7 +34,7 @@ final class AppStore: ObservableObject {
         var history: [HistoryEntry] = []
     }
 
-    @Published private(set) var snapshot = Snapshot()
+    @Published var snapshot = Snapshot()
     private let fileURL: URL
     private let queue = DispatchQueue(label: "snaptrans.store")
 
@@ -49,7 +49,7 @@ final class AppStore: ObservableObject {
     }
 
     /// 写盘（后台队列，原子写入）
-    private func persist() {
+    func persist() {
         let data = try? JSONEncoder().encode(snapshot)
         let url = fileURL
         queue.async {
