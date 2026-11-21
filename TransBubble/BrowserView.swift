@@ -46,7 +46,7 @@ struct BrowserView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
-        config.javaScriptEnabled = true
+        // 注：现代 WebKit SDK 已移除 javaScriptEnabled 开关，JavaScript 默认开启
         config.allowsInlineMediaPlayback = true
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
