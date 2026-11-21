@@ -1,11 +1,9 @@
 import SwiftUI
-import SwiftData
 
 // MARK: - 主页面（极简：五个入口）
 struct ContentView: View {
     @EnvironmentObject var theme: ThemeManager
     @EnvironmentObject var flow: AppFlowManager
-    @Environment(\.modelContext) private var modelContext
     @StateObject private var vm = TranslateViewModel()
     @StateObject private var pip = PipManager.shared
     @State private var showHistory = false
@@ -20,7 +18,7 @@ struct ContentView: View {
                 // 截图翻译主操作
                 Section {
                     Button {
-                        Task { await vm.startFlow(context: modelContext) }
+                        Task { await vm.startFlow() }
                     } label: {
                         HStack {
                             Image(systemName: "camera.viewfinder")
@@ -78,7 +76,7 @@ struct ContentView: View {
                 PipManager.shared.start(size: s.pipSize, opacity: s.pipOpacity)
             }
         }
-        .onChange(of: flow.pendingCaptureTrigger) { _, _ in consumeIntentTriggerIfNeeded() }
+        .onChange(of: flow.pendingCaptureTrigger) { _ in consumeIntentTriggerIfNeeded() }
         // 流程错误提示
         .alert("提示", isPresented: Binding(
             get: { if case .failed = vm.phase { return true }; return false },
@@ -94,14 +92,14 @@ struct ContentView: View {
     private func consumeIntentTriggerIfNeeded() {
         if UserDefaults.standard.bool(forKey: "pendingIntentTrigger") {
             UserDefaults.standard.set(false, forKey: "pendingIntentTrigger")
-            Task { await vm.startFlow(context: modelContext) }
+            Task { await vm.startFlow() }
         }
     }
 
     /// 悬浮球点击回调 → 截图翻译流程；双击 → 打开主界面
     private func setupPipCallbacks() {
         PipManager.shared.onTap = {
-            Task { await vm.startFlow(context: modelContext) }
+            Task { await vm.startFlow() }
         }
         PipManager.shared.onDoubleTap = {
             // 双击：仅取消触发（主界面已在前台时无额外动作；从 PiP 回到 App 即主界面）
