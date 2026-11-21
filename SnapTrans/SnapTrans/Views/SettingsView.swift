@@ -59,15 +59,24 @@ struct SettingsView: View {
             }
             HStack {
                 Button("保存密钥") {
-                    KeychainService.save(deeplKey.trimmingCharacters(in: .whitespaces))
-                    cacheClearedToast = "密钥已加密保存到 Keychain"
+                    let trimmed = deeplKey.trimmingCharacters(in: .whitespaces)
+                    KeychainService.save(trimmed)
+                    // 保存后回读验证，给出真实结果
+                    let saved = KeychainService.load()
+                    cacheClearedToast = (saved == trimmed && !trimmed.isEmpty)
+                        ? "密钥已加密保存到 Keychain ✓"
+                        : (trimmed.isEmpty ? "请先输入密钥再保存" : "保存失败，请重试")
                 }
+                // 关键修复：List 同一行多个按钮必须显式指定 buttonStyle，
+                // 否则点任意按钮会触发本行所有按钮（保存后立刻被清空）
+                .buttonStyle(.borderless)
                 Spacer()
                 Button("清空", role: .destructive) {
                     deeplKey = ""
                     KeychainService.clear()
                     cacheClearedToast = "密钥已清空"
                 }
+                .buttonStyle(.borderless)
             }
             .font(.footnote)
             Text("密钥使用 iOS Keychain 本地加密保存，不会上传。免费密钥可在 deepl.com 免费注册获取（每月 50 万字符）。")
