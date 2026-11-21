@@ -151,7 +151,7 @@ enum TranslateError: LocalizedError, Equatable {
         case .timeout: return "网络请求超时，请检查网络连接后重试。"
         case .badResponse: return "DeepL 返回格式异常，可能是服务端临时故障，请重试。"
         case .network(let m): return "网络错误：\(m)。请检查网络或稍后重试。"
-        case .appleUnavailable: return "苹果系统翻译需要 iOS 17.4 及以上版本，当前系统不支持。"
+        case .appleUnavailable: return "苹果系统翻译需要 iOS 18 及以上版本，当前系统不支持。"
         case .appleOfflinePackMissing: return "苹果离线翻译包未下载：请到「设置 → 通用 → 翻译」下载对应语言离线包。"
         case .ocrFailed(let m): return "文字识别失败：\(m)。请尝试重新截图或更换识别语种。"
         case .captureFailed(let m): return "截图失败：\(m)。请确认已在「设置 → 控制中心」添加「屏幕录制」并授权。"
