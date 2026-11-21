@@ -1,43 +1,50 @@
 import Foundation
 import Translation
 
-// MARK: - 苹果系统翻译服务（Translation 框架，iOS 17.4+，离线包可用时本地完成）
-// 说明：Translation 框架的 TranslationSession 由 SwiftUI 的 translationTask 修饰符托管，
-// 视图层把待翻译文本投递给 Coordinator，session 就绪后逐条翻译并回调。
-@available(iOS 17.4, *)
+// MARK: - 苹果系统翻译服务（Translation 框架，实际 API 需 iOS 18+）
+// 说明：TranslationSession 等 API 在 iOS 18.0 才可用，本文件采用"跨版本包装"结构：
+// 协调器本体不引用任何高版本符号（可在 iOS 17 上编译），仅 extension 限定 iOS 18+。
+
+// 待翻译项
 struct ApplePendingItem {
     let key: String        // 缓存 key
     let text: String       // 原文
-    let index: Int         // 在 blocks 中的下标
 }
 
-@available(iOS 17.4, *)
+// MARK: 跨版本协调器（视图层通过 translationTask 调用 perform）
 @MainActor
 final class AppleTranslateCoordinator: ObservableObject {
-    /// SwiftUI translationTask 绑定的配置
-    @Published var configuration: TranslationSession.Configuration?
-    /// 待翻译队列
-    private var pending: [ApplePendingItem] = []
+    struct ConfigData {
+        var source: Locale.Language?
+        var target: Locale.Language
+    }
+
+    /// 配置版本号（每次入队 +1，触发视图层 translationTask）
+    @Published var configRevision = 0
+    var configData: ConfigData?
+    var pending: [ApplePendingItem] = []
     /// 翻译完成回调：key -> 译文
     var onResult: ((String, String) -> Void)?
     var onError: ((TranslateError) -> Void)?
-    private var processing = false
 
-    /// 发起一批翻译（设置源/目标语言后自动触发 translationTask）
+    /// 发起一批翻译
     func enqueue(items: [ApplePendingItem], source: Locale.Language?, target: Locale.Language) {
         pending = items
-        configuration = TranslationSession.Configuration(
-            source: source,
-            target: target
-        )
+        configData = ConfigData(source: source, target: target)
+        configRevision += 1
     }
 
-    /// translationTask 就绪回调：逐条翻译
+    /// iOS 18 以下无实现（由下方 extension 覆盖真实逻辑）
+    func perform(session: Any) async {}
+}
+
+// MARK: iOS 18+ 的真实翻译实现
+@available(iOS 18.0, *)
+extension AppleTranslateCoordinator {
     func perform(session: TranslationSession) async {
-        guard !processing else { return }
-        processing = true
-        defer { processing = false }
-        for item in pending {
+        let items = pending
+        pending = []
+        for item in items {
             do {
                 let response = try await session.translate(item.text)
                 onResult?(item.key, response.targetText)
@@ -47,16 +54,13 @@ final class AppleTranslateCoordinator: ObservableObject {
                 break
             }
         }
-        pending = []
-        configuration = nil // 结束本批次
     }
 }
 
-// MARK: - 苹果翻译可用性检查
+// MARK: 苹果翻译可用性检查（iOS 18.0+）
 enum AppleTranslateService {
-    /// 系统是否支持 Translation 框架（iOS 17.4+）
     static var isSupported: Bool {
-        if #available(iOS 17.4, *) { return true }
+        if #available(iOS 18.0, *) { return true }
         return false
     }
 }
