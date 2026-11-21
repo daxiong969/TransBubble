@@ -32,13 +32,14 @@ final class TTSService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
         for (i, text) in texts.enumerated() {
             let utterance = AVSpeechUtterance(string: text)
             utterance.rate = Float(avRate)
-            utterance.locale = Locale(identifier: language)
-            // 切换 TTS 语音
+            // 语言通过语音设置（AVSpeechUtterance 无 locale 属性）
             if !voiceIdentifier.isEmpty,
                let voice = AVSpeechSynthesisVoice(identifier: voiceIdentifier) {
                 utterance.voice = voice
             } else if let voice = AVSpeechSynthesisVoice(language: language) {
                 utterance.voice = voice
+            } else {
+                utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
             }
             utterance.postUtteranceDelay = 0.1
             synthesizer.speak(utterance)
@@ -87,5 +88,5 @@ final class TTSService: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
 func availableVoices() -> [AVSpeechSynthesisVoice] {
     return AVSpeechSynthesisVoice.speechVoices()
         .filter { ["zh-CN", "zh-TW", "en-US", "ja-JP", "ko-KR"].contains($0.language) }
-        .sorted { $0.language < $0.language }
+        .sorted { $0.language < $1.language }
 }
