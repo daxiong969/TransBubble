@@ -1,6 +1,5 @@
 import Foundation
 import SwiftUI
-import SwiftData
 import AVFoundation
 
 // MARK: - 截图翻译流程 ViewModel
@@ -30,7 +29,7 @@ final class TranslateViewModel: ObservableObject {
 
     // 翻译引擎
     let deeplService = DeepLTranslateService()
-    let appleCoordinator = AppleTranslateCoordinator() // iOS17.4+ 才创建有效
+    let appleCoordinator = AppleTranslateCoordinator() // 跨版本包装，iOS 18+ 才有真实实现
 
     // 朗读
     let tts = TTSService()
@@ -41,7 +40,7 @@ final class TranslateViewModel: ObservableObject {
     var pipelinePreviewHook: ((UIImage) -> Void)?
 
     // MARK: 主流程入口（悬浮球 / 快捷指令 / 手动按钮统一调用）
-    func startFlow(context: ModelContext) async {
+    func startFlow() async {
         phase = .capturing
         errorMessage = nil
         do {
@@ -51,7 +50,7 @@ final class TranslateViewModel: ObservableObject {
             // 2. OCR 识别
             phase = .recognizing
             let ocr = OCRService()
-            var textBlocks = try await ocr.recognize(image: image, language: settings.ocrLanguage)
+            let textBlocks = try await ocr.recognize(image: image, language: settings.ocrLanguage)
             guard !textBlocks.isEmpty else {
                 phase = .failed("未识别到文字。请确认截图中包含文字，或到「设置 → OCR 识别语种」切换语种。")
                 return
@@ -63,7 +62,7 @@ final class TranslateViewModel: ObservableObject {
             blocks = textBlocks
             phase = .translating
             // 3~4. 缓存判断 → 翻译
-            await translateAll(context: context)
+            await translateAll()
         } catch let e as TranslateError {
             phase = .failed(e.errorDescription ?? "流程失败")
         } catch {
@@ -72,11 +71,11 @@ final class TranslateViewModel: ObservableObject {
     }
 
     // MARK: 批量翻译（缓存优先，未命中的调用对应引擎）
-    func translateAll(context: ModelContext, force: Bool = false, engineOverride: String? = nil) async {
+    func translateAll(force: Bool = false, engineOverride: String? = nil) async {
         guard !blocks.isEmpty else { return }
         let engine = engineOverride ?? settings.defaultEngine
         let target = settings.targetLang
-        let cache = CacheService(context: context)
+        let cache = CacheService.shared
         hitCacheAny = false
 
         // 过滤掉被忽略的块
@@ -156,15 +155,15 @@ final class TranslateViewModel: ObservableObject {
                 let sourceLang = settings.sourceLang == "auto" ? nil :
                     Locale.Language(identifier: LangDefs.ttsLocale(settings.sourceLang))
                 let targetLang = Locale.Language(identifier: LangDefs.ttsLocale(target))
-                let ctxCache = cache
                 appleCoordinator.onResult = { [weak self] key, text in
                     Task { @MainActor in
-                        ctxCache.save(key: key, provider: "apple", translation: text)
-                        if let i = self?.blocks.firstIndex(where: {
-                            makeCacheKey($0.original, source: self?.settings.sourceLang ?? "auto",
-                                         target: self?.settings.targetLang ?? "zh-Hans", provider: "apple") == key
-                        }) {
-                            self?.blocks[i].apple = text
+                        cache.save(key: key, provider: "apple", translation: text)
+                        if let self,
+                           let i = self.blocks.firstIndex(where: {
+                               makeCacheKey($0.original, source: self.settings.sourceLang,
+                                            target: self.settings.targetLang, provider: "apple") == key
+                           }) {
+                            self.blocks[i].apple = text
                         }
                     }
                 }
@@ -184,7 +183,7 @@ final class TranslateViewModel: ObservableObject {
         let overlay = compositedImage(style: settings.style(for: UITraitCollection.current.userInterfaceStyle == .dark),
                                       provider: engine)
         let anyCache = blocks.contains { $0.fromCache }
-        _ = HistoryService(context: context).add(
+        _ = HistoryService.shared.add(
             image: screenshot ?? UIImage(),
             overlay: overlay,
             blocks: blocks.filter { !$0.ignored },
@@ -202,13 +201,13 @@ final class TranslateViewModel: ObservableObject {
     }
 
     // MARK: 单块重新翻译（修改原文后 / 单块重译，带 300ms 防抖）
-    func retranslateBlock(_ block: TextBlock, context: ModelContext) {
+    func retranslateBlock(_ block: TextBlock) {
         translateTask?.cancel()
         let snapshot = block
         translateTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled, let self else { return }
-            let cache = CacheService(context: context)
+            let cache = CacheService.shared
             let target = self.settings.targetLang
             let engine = self.settings.defaultEngine
             let key = makeCacheKey(snapshot.original, source: self.settings.sourceLang, target: target, provider: engine)
@@ -253,9 +252,9 @@ final class TranslateViewModel: ObservableObject {
     }
 
     // MARK: 一键重新翻译（可换目标语言/引擎）
-    func retranslate(context: ModelContext, engine: String? = nil) async {
+    func retranslate(engine: String? = nil) async {
         phase = .translating
-        await translateAll(context: context, force: true, engineOverride: engine)
+        await translateAll(force: true, engineOverride: engine)
     }
 
     // MARK: 朗读
