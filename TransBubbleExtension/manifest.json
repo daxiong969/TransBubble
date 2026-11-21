@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "TransBubble 悬浮翻译",
+  "version": "1.0.0",
+  "description": "在任意网页上显示悬浮球，一键将页面内容翻译为中文（支持 100+ 语言自动检测）",
+  "default_locale": "zh_CN",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://translate.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_title": "TransBubble 悬浮翻译",
+    "default_popup": "popup.html"
+  }
+}
