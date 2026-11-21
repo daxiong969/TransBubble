@@ -1,12 +1,10 @@
 import SwiftUI
-import SwiftData
 import Photos
 import Translation
 
 // MARK: - 翻译预览页（核心）
 // 底层原图固定不变，上层译文精准叠加；支持缩放拖动、双语对比、单块操作、导出、朗读、框选识别、编辑原文
 struct CapturePreviewView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var systemScheme
     @ObservedObject var vm: TranslateViewModel
@@ -88,12 +86,12 @@ struct CapturePreviewView: View {
         .navigationTitle("翻译预览")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .navigationBarLeading) {
                 Button("关闭") { vm.tts.stop(); dismiss() }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button("重新翻译") {
-                    Task { await vm.retranslate(context: modelContext) }
+                    Task { await vm.retranslate() }
                 }
             }
         }
@@ -104,7 +102,7 @@ struct CapturePreviewView: View {
             EditOriginalSheet(block: block) { newText in
                 if let i = vm.blocks.firstIndex(where: { $0.id == block.id }) {
                     vm.blocks[i].original = newText
-                    vm.retranslateBlock(vm.blocks[i], context: modelContext)
+                    vm.retranslateBlock(vm.blocks[i])
                 }
             }
         }
@@ -228,14 +226,14 @@ struct CapturePreviewView: View {
                         for i in vm.blocks.indices {
                             vm.blocks[i].ignored = !inSelection(vm.blocks[i])
                         }
-                        Task { await vm.retranslate(context: modelContext) }
+                        Task { await vm.retranslate() }
                     }
                     .buttonStyle(.borderedProminent)
                 }
                 // 切换引擎重译
                 Menu {
-                    Button("用 DeepL 重译") { Task { await vm.retranslate(context: modelContext, engine: "deepl") } }
-                    Button("用苹果翻译重译") { Task { await vm.retranslate(context: modelContext, engine: "apple") } }
+                    Button("用 DeepL 重译") { Task { await vm.retranslate(engine: "deepl") } }
+                    Button("用苹果翻译重译") { Task { await vm.retranslate(engine: "apple") } }
                 } label: {
                     Label("切换引擎", systemImage: "arrow.triangle.2.circlepath")
                 }
@@ -380,8 +378,8 @@ struct EditOriginalSheet: View {
             }
             .navigationTitle("修改原文")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarLeading) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("重新翻译") {
                         onSubmit(text)
                         dismiss()
