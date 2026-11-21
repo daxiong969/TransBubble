@@ -52,6 +52,12 @@ struct ContentView: View {
                     }
                     Text("iOS 限制说明：系统不允许普通 App 全局悬浮，本方案使用「画中画(PiP)」窗口实现悬浮球。")
                         .font(.caption).foregroundStyle(.secondary)
+                    // 悬浮球启动状态提示（准备中/失败原因/已启动）
+                    if !pip.statusMessage.isEmpty {
+                        Text(pip.statusMessage)
+                            .font(.caption)
+                            .foregroundStyle(pip.isActive ? Color.green : Color.orange)
+                    }
                 }
                 // 其他入口
                 Section {
