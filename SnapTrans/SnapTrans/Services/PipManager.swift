@@ -61,7 +61,8 @@ final class PipManager: NSObject, ObservableObject, AVPictureInPictureController
         self.window = window
         self.playerLayer = layer
 
-        let pip = AVPictureInPictureController(playerLayer: layer)
+        let pipInit = AVPictureInPictureController(playerLayer: layer)
+        guard let pip = pipInit else { return }
         pip.delegate = self
         self.pipController = pip
         self.player = player
