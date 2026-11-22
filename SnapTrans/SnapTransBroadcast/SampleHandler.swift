@@ -48,7 +48,7 @@ class SampleHandler: RPBroadcastSampleHandler {
     // MARK: OCR（Vision，扩展进程内完成）
     private func ocrAndMaybeTranslate(_ image: UIImage) {
         guard let cgImage = image.cgImage else { return }
-        let request = VNRecognizeTextRequest { [weak self] req in
+        let request = VNRecognizeTextRequest { [weak self] req, _ in
             let observations = req.results as? [VNRecognizedTextObservation] ?? []
             let lines = observations.compactMap { $0.topCandidates(1).first?.string }
             let text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
