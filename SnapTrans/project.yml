@@ -18,17 +18,46 @@ targets:
     platform: iOS
     sources:
       - SnapTrans
+    dependencies:
+      - target: SnapTransBroadcast
+    entitlements:
+      path: SnapTrans/SnapTrans.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.daxiong969.SnapTrans]
     info:
       path: SnapTrans/Info.plist
       properties:
         CFBundleDisplayName: 译拍通
         CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "1"
+        CFBundleVersion: "2"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
         NSPhotoLibraryAddUsageDescription: 用于将带译文叠加的合成图片保存到您的相册，仅保存在本机。
         UIBackgroundModes: [audio]
+  SnapTransBroadcast:
+    type: app-extension
+    platform: iOS
+    sources:
+      - SnapTransBroadcast
+      - SnapTrans/Shared/BroadcastShared.swift
+    entitlements:
+      path: SnapTransBroadcast/SnapTransBroadcast.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.daxiong969.SnapTrans]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daxiong969.SnapTrans.Broadcast
+        SKIP_INSTALL: "YES"
+    info:
+      path: SnapTransBroadcast/Info.plist
+      properties:
+        CFBundleDisplayName: 译拍通直播翻译
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "2"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.broadcast-services-upload
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
   SnapTransTests:
     type: bundle.unit-test
     platform: iOS
