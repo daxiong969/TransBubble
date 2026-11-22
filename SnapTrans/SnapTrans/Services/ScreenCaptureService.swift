@@ -40,7 +40,7 @@ final class ScreenCaptureService {
                 if let startError {
                     resumed = true
                     let msg = startError.localizedDescription
-                    cont.resume(throwing: TranslateError.captureFailed("\(msg)；请到「设置 → 控制中心」添加「屏幕录制」并允许"))
+                    cont.resume(throwing: TranslateError.captureFailed("\(msg)（翻译其他 App 页面请使用首页「直播翻译」入口）"))
                 }
             }
             // 10 秒超时保护
