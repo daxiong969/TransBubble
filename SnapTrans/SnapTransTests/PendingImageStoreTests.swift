@@ -14,7 +14,10 @@ final class PendingImageStoreTests: XCTestCase {
 
     /// 保存 → 消费：图片必须原样读回
     func testSaveAndConsumeRoundtrip() throws {
-        let img = UIGraphicsImageRenderer(size: CGSize(width: 50, height: 50)).image { rc in
+        // 固定 1 倍缩放，避免模拟器屏幕 scale 影响像素尺寸断言
+        let fmt = UIGraphicsImageRendererFormat()
+        fmt.scale = 1
+        let img = UIGraphicsImageRenderer(size: CGSize(width: 50, height: 50), format: fmt).image { rc in
             UIColor.orange.setFill()
             rc.fill(CGRect(x: 0, y: 0, width: 50, height: 50))
         }
