@@ -12,7 +12,7 @@ struct TranslateScreenshotIntent: AppIntent {
     )
     static var openAppWhenRun: Bool = true
 
-    @Parameter(title: "截图", description: "要翻译的截图图片", requestedValueDialog: "请提供要翻译的截图")
+    @Parameter(title: "截图", description: "要翻译的截图图片", requestValueDialog: "请提供要翻译的截图")
     var image: IntentFile
 
     @MainActor
