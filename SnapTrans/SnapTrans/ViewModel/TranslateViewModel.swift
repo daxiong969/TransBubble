@@ -39,15 +39,27 @@ final class TranslateViewModel: ObservableObject {
     /// 流程完成回调（携带截图，用于弹出预览页）
     var pipelinePreviewHook: ((UIImage) -> Void)?
 
-    // MARK: 主流程入口（悬浮球 / 快捷指令 / 手动按钮统一调用）
+    // MARK: 主流程入口（App 内手动截图按钮调用）
     func startFlow() async {
         phase = .capturing
         errorMessage = nil
         do {
             // 1. 截图一次（单帧，不持续录屏）
             let image = try await ScreenCaptureService.shared.captureSingleFrame()
-            screenshot = image
-            // 2. OCR 识别
+            // 2~4. OCR → 缓存判断 → 翻译
+            await processImage(image)
+        } catch let e as TranslateError {
+            phase = .failed(e.errorDescription ?? "流程失败")
+        } catch {
+            phase = .failed(error.localizedDescription)
+        }
+    }
+
+    // MARK: 通用图片处理流程（App 内截图 / 相册导入 / 快捷指令传入的截图统一走这里）
+    func processImage(_ image: UIImage) async {
+        screenshot = image
+        do {
+            // OCR 识别
             phase = .recognizing
             let ocr = OCRService()
             let textBlocks = try await ocr.recognize(image: image, language: settings.ocrLanguage)
