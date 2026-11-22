@@ -23,7 +23,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         // 结束时不做清理：画面与结果留给主 App 消费
     }
 
-    override func receive(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
+    override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
         guard sampleBufferType == .video else { return }
         frameIndex += 1
         // 跳过开头几帧（开始直播瞬间的系统动画）
