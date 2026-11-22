@@ -289,7 +289,7 @@ struct PrivacyPolicyView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Group {
                     Text("屏幕录制权限").font(.headline)
-                    Text("仅在点击悬浮球/快捷指令触发时截取单次屏幕画面，不会持续录制屏幕。截图仅用于本地 OCR 文字识别，原图不会上传至任何服务器；只有识别提取后的文本会发送给 DeepL 用于翻译；苹果翻译可在本地离线完成。")
+                    Text("「直播翻译」使用系统录屏广播机制：点按后由系统弹窗确认，画面仅在本机处理，不会持续上传。截图仅用于本地 OCR 文字识别，原图不会上传至任何服务器；只有识别提取后的文本会发送给 DeepL 用于翻译；苹果翻译可在本地离线完成。")
                 }
                 Group {
                     Text("相册权限").font(.headline)
