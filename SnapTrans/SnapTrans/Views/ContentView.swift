@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showGuide = false
     @State private var showPhotoPicker = false
+    @State private var showBroadcastSheet = false
     @AppStorage("pipEnabled") private var pipEnabled = false
 
     var body: some View {
@@ -35,7 +36,27 @@ struct ContentView: View {
                     Text("推荐玩法：按「快捷指令配置」把【截图→翻译截图】绑定到系统小白点（辅助触控）或轻点背面，在任意页面点一下即自动截图翻译，无需打开本 App。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                // 悬浮球开关（PiP 方案，体验受限，作为备选保留）
+                // 直播翻译：唯一能截取「其他 App 页面」的合法方案（录屏广播扩展）
+                Section("直播翻译（截其他 App 页面）") {
+                    Button {
+                        BroadcastService.requestNotificationAuth()
+                        BroadcastService.syncConfigToShared()
+                        showBroadcastSheet = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                                .font(.title2)
+                            Text("开启直播翻译")
+                                .font(.headline)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .listRowBackground(Color.clear)
+                    Text("点按后在系统弹窗中选择「译拍通」→ 点「开始直播」（状态栏变红属正常）。随后切到微信、Safari 等任意页面，画面会自动送入译拍通识别翻译；回到本 App 即自动显示最新翻译结果，点红色状态栏可停止。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                // 悬浮球开关（PiP 方案，作为快捷入口保留）
                 Section("画中画悬浮球（备选）") {
                     Toggle(isOn: Binding(
                         get: { pipEnabled },
@@ -43,6 +64,7 @@ struct ContentView: View {
                             pipEnabled = on
                             let s = AppSettings()
                             if on {
+                                BroadcastService.requestNotificationAuth()
                                 PipManager.shared.start(size: s.pipSize, opacity: s.pipOpacity)
                             } else {
                                 PipManager.shared.stop()
@@ -50,11 +72,11 @@ struct ContentView: View {
                         })) {
                         VStack(alignment: .leading) {
                             Text("开启画中画悬浮球")
-                            Text("悬浮于其他 App 之上；首次点击弹出播放控制，再点暂停即触发截图翻译")
+                            Text("悬浮于其他 App 之上；点击悬浮球 = 翻译最近一次直播画面，并以通知显示结果")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    Text("说明：PiP 窗口可双指捏合缩小。受系统限制，点击会先显示视频控制条，翻译触发为「暂停播放」动作；更流畅的入口推荐使用上方的小白点快捷指令。")
+                    Text("说明：悬浮球需配合「直播翻译」使用——先开启直播，再切到任意页面，点一下悬浮球即翻译当前画面（通知形式）。普通截图翻译仍推荐上方的小白点快捷指令。")
                         .font(.caption).foregroundStyle(.secondary)
                     // 悬浮球启动状态提示（准备中/失败原因/已启动）
                     if !pip.statusMessage.isEmpty {
@@ -80,6 +102,10 @@ struct ContentView: View {
                     Task { await vm.processImage(image) }
                 }
             }
+        }
+        // 系统录屏广播选择器（直播翻译开播入口）
+        .sheet(isPresented: $showBroadcastSheet) {
+            BroadcastPickerSheet()
         }
         // 翻译结果预览（全屏）
         .fullScreenCover(item: $flow.capturedImage) { image in
@@ -109,12 +135,17 @@ struct ContentView: View {
         .onDisappear { vm.tts.stop() }
     }
 
-    /// 消费两类外部触发：
+    /// 消费三类外部触发：
     /// 1) 快捷指令传入的待翻译截图（小白点 → 截图 → 翻译截图）
-    /// 2) 「选图翻译」指令（打开 App 自动弹出相册选图）
+    /// 2) 直播翻译扩展保存的最新画面（从其他 App 回到本 App 时自动处理）
+    /// 3) 「选图翻译」指令（打开 App 自动弹出相册选图）
     private func consumeIntentAndPendingIfNeeded() {
         if let img = PendingImageStore.consume() {
             Task { await vm.processImage(img) }
+            return
+        }
+        if let frameImg = BroadcastService.consumePendingFrame() {
+            Task { await vm.processImage(frameImg) }
             return
         }
         if UserDefaults.standard.bool(forKey: "pendingOpenPicker") {
@@ -123,10 +154,28 @@ struct ContentView: View {
         }
     }
 
-    /// 悬浮球点击回调 → 截图翻译流程；双击 → 打开主界面
+    /// 悬浮球点击回调：翻译最近一次直播画面（后台运行，结果以通知呈现）；双击 → 打开主界面
     private func setupPipCallbacks() {
         PipManager.shared.onTap = {
-            Task { await vm.startFlow() }
+            Task { @MainActor in
+                if let img = BroadcastService.consumePendingFrame() {
+                    await vm.processImage(img)
+                    let translated = vm.blocks
+                        .filter { !$0.ignored }
+                        .map { $0.deepl.isEmpty ? $0.apple : $0.deepl }
+                        .filter { !$0.isEmpty }
+                        .joined(separator: "；")
+                    BroadcastService.postNotification(
+                        title: "译拍通 · 翻译完成",
+                        body: translated.isEmpty
+                            ? "识别完成但暂无译文，请检查 DeepL Key 配置"
+                            : String(translated.prefix(120)))
+                } else {
+                    BroadcastService.postNotification(
+                        title: "译拍通 · 暂无直播画面",
+                        body: "请先在 App 内开启「直播翻译」，之后任意页面均可点悬浮球翻译")
+                }
+            }
         }
         PipManager.shared.onDoubleTap = {
             // 双击：仅取消触发（主界面已在前台时无额外动作；从 PiP 回到 App 即主界面）
